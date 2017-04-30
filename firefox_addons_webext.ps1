@@ -22,19 +22,19 @@ function getNumberOfAddons {
 function export($pageSizeForExport) {
     #Prepare line for export:
     [int]$nonwebextension = $compatStats["compatible"] + $compatStats["incompatible"] + $compatStats["unknown"]
-	[int]$percent = (($compatStats["compatible-webextension"]/$nonwebextension)*100)
-    [String]$newline = (get-date).ToString() + "," + $compatStats["compatible-webextension"] + "," + $nonwebextension + "," + $percent + "," + $compatStats["compatible"] + "," + $compatStats["incompatible"] + "," + $compatStats["unknown"]
+	[single]$percent = (($compatStats["compatible-webextension"]/$nonwebextension)*100)
+    [String]$newline = (get-date).ToString() + "`t" + $compatStats["compatible-webextension"] + "`t" + $nonwebextension + "`t" + $percent + "`t" + $compatStats["compatible"] + "`t" + $compatStats["incompatible"] + "`t" + $compatStats["unknown"]
 	
     #CSV export:
-    $newline >> ("C:\Users\Emanuel\Dropbox\FFwebExtStats" + $pageSizeForExport + ".csv")
+    $newline >> ("C:\Users\Emanuel\Dropbox\FFwebExtStats" + $pageSizeForExport + ".tsv")
 
     #export to a server over ssh:
-    C:\ff-webext\plink.exe -i "C:\ff-webext\priv.ppk" pi@raspberrypi ('echo "' + $newline + '" >> /var/www/html/ff/FFwebExtStats' + $pageSizeForExport + '.csv')
+    C:\ff-webext\plink.exe -i "C:\ff-webext\priv.ppk" pi@raspberrypi ('echo "' + $newline + '" >> /var/www/html/ff/FFwebExtStats' + $pageSizeForExport + '.tsv')
 }
 
-[int[]]$numAddonsArray = 50,500,5000,(getNumberOfAddons)	#Four csv exports with 50, 500 and 5000 addons  #https://addons.mozilla.org/en-US/firefox/search/?sort=users&appver=any&_pjax=true&atype=1&page=&cat=
+[int[]]$numAddonsArray = 50,500,5000,(getNumberOfAddons)	#Four csv exports with 50, 500 and 5000 addons; Must be a multiple of $pageSize;  #https://addons.mozilla.org/en-US/firefox/search/?sort=users&appver=any&_pjax=true&atype=1&page=&cat=
 [int]$pageSize = 50									#50 addons per page
-[int]$numPages = $numAddonsArray[3]/$pageSize
+[int]$numPages = (($numAddonsArray | measure -Maximum).Maximum)/$pageSize
 [String]$URIaddonAPI = "https://addons.mozilla.org"	#URL to addon page
 [hashtable]$compatStats = @{"compatible" = 0; "compatible-webextension" = 0; "incompatible" = 0; "unknown" = 0} #by the API returned types of extensions
 $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
@@ -54,10 +54,10 @@ for($page = 1; $page -le $numPages; $page++) { #Going through search pages (page
 			"compatible"				{ $compatStats["compatible"]++ }
 			"compatible-webextension"	{ $compatStats["compatible-webextension"]++ }
 			"incompatible"				{ $compatStats["incompatible"]++ }
-			"unknown"					{ $compatStats["unknown"]++ }
+			default						{ $compatStats["unknown"]++ }
 		}
 	}
-    if ( ($page -eq [int]$numAddonsArray[0]/$pageSize) -or ($page -eq [int]$numAddonsArray[1]/$pageSize) -or ($page -eq [int]$numAddonsArray[2]/$pageSize) ) {
+    if ( ($page -eq [int]($numAddonsArray[0]/$pageSize)) -or ($page -eq [int]($numAddonsArray[1]/$pageSize)) -or ($page -eq [int]($numAddonsArray[2]/$pageSize)) ) {
         export($page*$pageSize)
     }
 }
