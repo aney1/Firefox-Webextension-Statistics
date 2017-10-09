@@ -22,14 +22,12 @@ function getNumberOfAddons {
 function export($pageSizeForExport) {
     #Prepare line for export:
     [int]$nonwebextension = $compatStats["compatible"] + $compatStats["incompatible"] + $compatStats["unknown"]
-	[single]$percent = (($compatStats["compatible-webextension"]/$nonwebextension)*100)
+	[String]$percent = [Single](($compatStats["compatible-webextension"]/$nonwebextension)*100)
+    [String]$percent = $percent.replace(".",",")
     [String]$newline = (get-date).ToString() + "`t" + $compatStats["compatible-webextension"] + "`t" + $nonwebextension + "`t" + $percent + "`t" + $compatStats["compatible"] + "`t" + $compatStats["incompatible"] + "`t" + $compatStats["unknown"]
-	
+
     #CSV export:
     $newline >> ("C:\Users\Emanuel\Dropbox\FFwebExtStats" + $pageSizeForExport + ".tsv")
-
-    #export to a server over ssh:
-    C:\ff-webext\plink.exe -i "C:\ff-webext\priv.ppk" pi@raspberrypi ('echo "' + $newline + '" >> /var/www/html/ff/FFwebExtStats' + $pageSizeForExport + '.tsv')
 }
 
 [int[]]$numAddonsArray = 50,500,5000,(getNumberOfAddons)	#Four csv exports with 50, 500 and 5000 addons; Must be a multiple of $pageSize;  #https://addons.mozilla.org/en-US/firefox/search/?sort=users&appver=any&_pjax=true&atype=1&page=&cat=
@@ -41,20 +39,22 @@ $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
 $OutputEncoding = [Text.UTF8Encoding]::UTF8
 
 for($page = 1; $page -le $numPages; $page++) { #Going through search pages (pages can't be as big as you want)
-	"Page: $page of $numPages"
+    Write-Progress -Id 0 -Activity 'Processing pages' -CurrentOperation "Page: $($page)" -PercentComplete (($page/$numPages) * 100)
 	[String]$URIpopularAddonsSearch = $URIaddonAPI + "/api/v3/addons/search/?app=firefox&type=extension&page=" + $page + "&sort=users&page_size=" + $pageSize
 	[int[]]$popularAddonsIDs = (Invoke-RestMethod -Method Get -Uri $URIpopularAddonsSearch).results.id		#get one page of popular addons
-
+    $counter=0
 	foreach($popularAddonID in $popularAddonsIDs) { #Getting infos of all addons in current page
-		"Extension ID: $popularAddonID"
-		[String]$addonCompatibility="unknown"  #If get feature_compatibility fails -> unknown
+		#"Extension ID: $popularAddonID"
+        Write-Progress -Id 1 -Activity 'Processing Extensions' -CurrentOperation "Processing Extension ID: $($popularAddonID)" -PercentComplete (($counter / $popularAddonsIDs.count) * 100)
+        $counter++
+		[String]$addonCompatibility="unknown"
 		[String]$URIfeatureCompat = $URIaddonAPI + "/api/v3/addons/addon/" + $popularAddonID + "/feature_compatibility/"
 		[String]$addonCompatibility = (Invoke-RestMethod -Method Get -Uri $URIfeatureCompat).e10s	#get feature_compatibility of one addon
 		switch ($addonCompatibility) {
 			"compatible"				{ $compatStats["compatible"]++ }
 			"compatible-webextension"	{ $compatStats["compatible-webextension"]++ }
 			"incompatible"				{ $compatStats["incompatible"]++ }
-			default						{ $compatStats["unknown"]++ }
+			"unknown"						{ $compatStats["unknown"]++ }
 		}
 	}
     if ( ($page -eq [int]($numAddonsArray[0]/$pageSize)) -or ($page -eq [int]($numAddonsArray[1]/$pageSize)) -or ($page -eq [int]($numAddonsArray[2]/$pageSize)) ) {
